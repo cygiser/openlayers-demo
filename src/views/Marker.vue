@@ -1,6 +1,7 @@
 <template>
   <div id="mymap" style="width: 1500px; height: 800px">
     <div class="popup" ref="popup" v-show="ifShow">
+      <el-link icon="el-icon-edit" type="primary" :underline="false" @click.native="dialogVisible=true">编辑该标记</el-link>
       <el-link icon="el-icon-delete" type="danger" :underline="false" @click.native="handleDelete">删除该标记</el-link>
     </div>
     <div class="select">
@@ -25,6 +26,25 @@
         </el-dropdown-menu>
       </el-dropdown>
     </div>
+    <el-dialog title="提示" :visible.sync="dialogVisible" width="500px" :before-close="handleClose">
+      <el-form v-model="form">
+        <el-form-item label="字体" label-width="120px">
+          <el-select v-model="form.fontName" @change="handelChange">
+            <el-option v-for="item in form.fonts" :key="item.fon" :label="item.fon" :value="item.fon"></el-option>
+          </el-select>
+        </el-form-item>
+        <el-form-item label="大小" label-width="120px">
+          <el-input-number v-model="form.size" :min="12" :max="30" label="文字大小" @change="handelChange"></el-input-number>
+        </el-form-item>
+        <el-form-item label="内容" label-width="120px">
+          <el-input v-model="form.content" @change="handelChange"></el-input>
+        </el-form-item>
+      </el-form>
+      <span slot="footer" class="dialog-footer">
+        <el-button @click="handleCancel">取 消</el-button>
+        <el-button type="primary" @click="handleOk">确 定</el-button>
+      </span>
+    </el-dialog>
   </div>
 </template>
 
@@ -47,7 +67,20 @@ export default {
       overlay: null,
       ifShow: false, //控制弹窗是否显示
       feature: null,
+      text: textLabel.clone(), //克隆一份默认样式，避免改变样式时默认样式被污染
+      dialogVisible: false, //控制对话框是否显示
+      form: {
+        fonts: [{ fon: '微软雅黑 ' }, { fon: 'Arial ' }],
+        fontName: '',
+        size: 12,
+        content: '请输入文字内容',
+      },
     }
+  },
+  computed: {
+    font() {
+      return 'normal ' + this.form.size + 'px ' + this.form.fontName
+    },
   },
   methods: {
     init_map() {
@@ -151,8 +184,7 @@ export default {
         })
         this.draw.on('drawend', (e) => {
           let feature = e.feature
-          feature.setStyle(textLabel)
-          feature.getStyle().getText().setText('curry')
+          feature.setStyle(this.text)
         })
       }
       //如果画其他图形，需设置geometryFunction
@@ -177,14 +209,18 @@ export default {
     sigleClick() {
       this.map.on('singleclick', (e) => {
         //获取点击的标注
-        this.feature = this.map.forEachFeatureAtPixel(e.pixel, function (feature, layer) {
+        let feature = this.map.forEachFeatureAtPixel(e.pixel, function (feature, layer) {
           return feature
         })
+        if (feature) {
+          this.feature = feature
+        }
+        //console.log(this.feature)
         //如果点击到标记
-        if (this.feature) {
+        if (feature) {
           this.ifShow = true //弹窗显示
           //设置弹窗的位置
-          this.overlay.setPosition([this.feature.values_.geometry.flatCoordinates[0], this.feature.values_.geometry.flatCoordinates[1]])
+          this.overlay.setPosition([feature.values_.geometry.flatCoordinates[0], feature.values_.geometry.flatCoordinates[1]])
           this.map.addOverlay(this.overlay)
         } else {
           this.ifShow = false
@@ -201,6 +237,40 @@ export default {
       this.markerSource.forEachFeature((feature) => {
         this.markerSource.removeFeature(feature)
       })
+    },
+    //关闭dialog前的回调，会暂停 Dialog 的关闭
+    handleClose(done) {
+      this.$confirm('确认关闭？')
+        .then((_) => {
+          done()
+        })
+        .catch((_) => {})
+    },
+    //表单改变时的回调
+    handelChange() {
+      //console.log(this.font)
+      let text = this.feature.getStyle().getText()
+      text.setFont(this.font)
+      text.setText(this.form.content)
+      //this.feature.getStyle().getText().setText('hello')
+      this.feature.changed() // 修改样式后刷新要素
+    },
+    //点击取消的回调
+    handleCancel() {
+      this.dialogVisible = false
+      //重置样式
+      this.form.fontName = ''
+      this.form.content = '请输入文字内容'
+      this.form.size = 12
+      this.feature.getStyle().getText().setFont(this.font)
+      this.feature.getStyle().getText().setText(this.form.content)
+      this.feature.changed()
+    },
+    //点击确定的回调
+    handleOk() {
+      this.dialogVisible = false
+      //重置样式
+      this.text = textLabel.clone()
     },
   },
   mounted() {

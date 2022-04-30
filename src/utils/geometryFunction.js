@@ -1,5 +1,5 @@
 import { Point, Polygon, LineString } from 'ol/geom'
-import { Fill, Icon, RegularShape, Stroke, Style, Text } from 'ol/style'
+import { Fill, Icon, Stroke, Style, Text } from 'ol/style'
 //星型
 let starFunction = function (coordinates, geometry) {
   //中心点
@@ -164,7 +164,7 @@ let textLabel = new Style({
     textBaseline: 'middle',
     text: '请输入文字内容',
     //字体样式
-    font: 'normal 14px 微软雅黑',
+    //font: 'normal 14px 微软雅黑',
   }),
 })
 
