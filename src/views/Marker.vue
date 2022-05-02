@@ -1,7 +1,7 @@
 <template>
   <div id="mymap" style="width: 1500px; height: 800px">
     <div class="popup" ref="popup" v-show="ifShow">
-      <el-link icon="el-icon-edit" type="primary" :underline="false" @click.native="dialogVisible=true">编辑该标记</el-link>
+      <el-link icon="el-icon-edit" type="primary" :underline="false" @click.native="handleEdit">编辑该标记</el-link>
       <el-link icon="el-icon-delete" type="danger" :underline="false" @click.native="handleDelete">删除该标记</el-link>
     </div>
     <div class="select">
@@ -15,6 +15,8 @@
           <el-dropdown-item command="LineString">线</el-dropdown-item>
           <el-dropdown-item command="Polygon">多边形</el-dropdown-item>
           <el-dropdown-item command="Circle">圆</el-dropdown-item>
+          <el-dropdown-item command="Ellipse">椭圆</el-dropdown-item>
+          <el-dropdown-item command="Sector">扇形</el-dropdown-item>
           <el-dropdown-item command="Box">矩形</el-dropdown-item>
           <el-dropdown-item command="Square">方形</el-dropdown-item>
           <el-dropdown-item command="Star">星型</el-dropdown-item>
@@ -36,6 +38,9 @@
         <el-form-item label="大小" label-width="120px">
           <el-input-number v-model="form.size" :min="12" :max="30" label="文字大小" @change="handelChange"></el-input-number>
         </el-form-item>
+        <el-form-item label="颜色" label-width="120px">
+          <el-color-picker v-model="form.color" @change="handelChange"></el-color-picker>
+        </el-form-item>
         <el-form-item label="内容" label-width="120px">
           <el-input v-model="form.content" @change="handelChange"></el-input>
         </el-form-item>
@@ -56,7 +61,7 @@ import * as olProj from 'ol/proj'
 import Draw, { createRegularPolygon } from 'ol/interaction/Draw'
 import Overlay from 'ol/Overlay'
 import { createBox } from 'ol/interaction/Draw'
-import { starFunction, arrowFunction, locFunction, singleArrowFunction, singleArrowStyle, textLabel } from '../utils/geometryFunction.js'
+import { starFunction, arrowFunction, locFunction, singleArrowFunction, singleArrowStyle, textLabel, EllipseFunction, SectorFunction } from '../utils/geometryFunction.js'
 export default {
   data() {
     return {
@@ -68,12 +73,14 @@ export default {
       ifShow: false, //控制弹窗是否显示
       feature: null,
       text: textLabel.clone(), //克隆一份默认样式，避免改变样式时默认样式被污染
+      currentText: null, //当前元素的Text的样式
       dialogVisible: false, //控制对话框是否显示
       form: {
         fonts: [{ fon: '微软雅黑 ' }, { fon: 'Arial ' }],
         fontName: '',
         size: 12,
         content: '请输入文字内容',
+        color: '#333', //字体颜色
       },
     }
   },
@@ -185,6 +192,21 @@ export default {
         this.draw.on('drawend', (e) => {
           let feature = e.feature
           feature.setStyle(this.text)
+        }) // 文字标记
+      } else if (command === 'Ellipse') {
+        this.draw = new Draw({
+          source: this.markerSource,
+          type: 'Polygon',
+          stopClick: true,
+          geometryFunction: EllipseFunction,
+        }) // 椭圆
+      } else if (command === 'Sector') {
+        this.draw = new Draw({
+          source: this.markerSource,
+          type: 'Polygon',
+          stopClick: true,
+          geometryFunction: SectorFunction,
+          maxPoints: 3,
         })
       }
       //如果画其他图形，需设置geometryFunction
@@ -238,6 +260,31 @@ export default {
         this.markerSource.removeFeature(feature)
       })
     },
+    //点击编辑标记的回调
+    handleEdit() {
+      this.dialogVisible = true
+      let text = this.feature.getStyle().getText() //当前要素的text样式
+      let font = text.getFont()
+      //将表单内容填充为当前样式
+      if (font) {
+        let fontName = font.split(' ')[2] //字体名字
+        let size = font.split(' ')[1].replace(/[^\d]/g, ' ') //字体大小
+        let content = text.getText() //文本内容
+        let color = text.getFill().getColor()
+        size = parseInt(size)
+        this.form.fontName = fontName
+        this.form.size = size
+        this.form.content = content
+        this.form.color = color
+      } else {
+        this.form.fontName = ''
+        this.form.size = 12
+        this.form.content = '请输入文字内容'
+        this.form.color = '#333'
+      }
+      //存储一下当前的样式
+      this.currentText = this.feature.getStyle().clone().getText()
+    },
     //关闭dialog前的回调，会暂停 Dialog 的关闭
     handleClose(done) {
       this.$confirm('确认关闭？')
@@ -252,6 +299,7 @@ export default {
       let text = this.feature.getStyle().getText()
       text.setFont(this.font)
       text.setText(this.form.content)
+      text.getFill().setColor(this.form.color)
       //this.feature.getStyle().getText().setText('hello')
       this.feature.changed() // 修改样式后刷新要素
     },
@@ -259,11 +307,7 @@ export default {
     handleCancel() {
       this.dialogVisible = false
       //重置样式
-      this.form.fontName = ''
-      this.form.content = '请输入文字内容'
-      this.form.size = 12
-      this.feature.getStyle().getText().setFont(this.font)
-      this.feature.getStyle().getText().setText(this.form.content)
+      this.feature.getStyle().setText(this.currentText)
       this.feature.changed()
     },
     //点击确定的回调

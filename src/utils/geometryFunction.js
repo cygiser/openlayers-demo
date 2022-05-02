@@ -1,4 +1,6 @@
-import { Point, Polygon, LineString } from 'ol/geom'
+import { Point, Polygon, LineString, LinearRing, Circle } from 'ol/geom'
+import { fromCircle } from 'ol/geom/Polygon'
+import { fromLonLat } from 'ol/proj'
 import { Fill, Icon, Stroke, Style, Text } from 'ol/style'
 //星型
 let starFunction = function (coordinates, geometry) {
@@ -167,5 +169,84 @@ let textLabel = new Style({
     //font: 'normal 14px 微软雅黑',
   }),
 })
-
-export { starFunction, arrowFunction, locFunction, singleArrowFunction, singleArrowStyle, textLabel }
+//椭圆
+function genEllipseGeom(radiusMajor, radiusMinor, center, rotation) {
+  var circle = new Circle(center, radiusMinor)
+  var polygon = fromCircle(circle, 64)
+  polygon.scale(radiusMajor / radiusMinor, 1)
+  polygon.rotate(rotation, center)
+  return polygon
+}
+let EllipseFunction = (coordinates, geometry) => {
+  let cArray = coordinates[0]
+  let center = cArray[0]
+  let startPoint = cArray[1]
+  let endPoint = cArray[2]
+  if (!geometry) {
+    geometry = new Polygon([])
+  }
+  if (cArray.length == 3) {
+    let coordinatesRing = cArray.slice()
+    coordinatesRing.push(center)
+    let plg = new Polygon([coordinatesRing])
+    let plygArea = plg.getArea()
+    let radiusMajor = Math.sqrt(Math.pow(center[0] - startPoint[0], 2) + Math.pow(center[1] - startPoint[1], 2))
+    let radiusMinor = (plygArea * 2) / radiusMajor
+    let dx = startPoint[0] - center[0]
+    let dy = startPoint[1] - center[1]
+    let rotation = Math.atan(dx / dy)
+    rotation = dy > 0 ? -rotation - Math.PI * 0.5 : -(Math.PI * 0.5 + rotation)
+    let f = genEllipseGeom(radiusMajor, radiusMinor, center, rotation)
+    geometry.setCoordinates(f.getCoordinates())
+  }
+  return geometry
+}
+//扇形
+//参数分别是圆心，半径，边数，弧度，旋转角度（即右边半径与x正向轴的角度）
+function getSector(origin, radius, sides, r, angel) {
+  /* var rotation = 360 - r
+  var angle = Math.PI * (1 / sides - 1 / 2)
+  if (rotation) {
+    angle += (rotation / 180) * Math.PI
+  } */
+  var rotatedAngle, x, y
+  var points = []
+  for (var i = 0; i < sides; ++i) {
+    var an = (i * r) / sides
+    rotatedAngle = angel + an
+    x = origin[0] + radius * Math.cos(rotatedAngle)
+    y = origin[1] + radius * Math.sin(rotatedAngle)
+    /* if (i === 0 || i === 1) {
+      console.log(new Point([x, y]))
+    } */
+    points.push([x, y])
+  }
+  points.push(origin)
+  var ring = new LinearRing([points])
+  console.log(ring)
+  ring.rotate(r + angel, origin)
+  return new Polygon([points])
+}
+let SectorFunction = (coordinates, geometry) => {
+  let cArray = coordinates[0]
+  let origin = cArray[0]
+  let startPoint = cArray[1]
+  let endPoint = cArray[2]
+  if (!geometry) {
+    geometry = new Polygon([])
+  }
+  if (cArray.length === 3) {
+    let dx = startPoint[0] - origin[0]
+    let dy = startPoint[1] - origin[1]
+    let radius = Math.sqrt(dx * dx + dy * dy)
+    let sides = 100
+    let angel = Math.atan2(dy, dx)
+    let angel2 = Math.atan2(endPoint[1] - origin[1], endPoint[0] - origin[0])
+    let r = angel2 - angel
+    let s = getSector(origin, radius, sides, r, angel)
+    //console.log(s)
+    geometry.setCoordinates(s.getCoordinates())
+  }
+  return geometry
+}
+export { starFunction, arrowFunction, locFunction, singleArrowFunction, singleArrowStyle, textLabel, EllipseFunction, SectorFunction }
